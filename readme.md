@@ -10,6 +10,7 @@ Actualmente monitorea:
 - Conectividad TCP hacia **DFS / File Server (SMB 445)**
 
 El proyecto está diseñado para ser:
+
 - simple
 - auditable
 - fácil de extender
@@ -62,56 +63,49 @@ El proyecto está diseñado para ser:
 ## 🔐 Manejo de secretos
 
 Las credenciales **NO se almacenan**:
+
 - en el script
 - en el unit file
 - en el repositorio
 
-Se utilizan archivos externos, por ejemplo:
+Se utilizan archivos externos de ejemplo:  
+examples/secrets.env.example
 
+
+Cada entorno debe crear su propio archivo real de secretos, por ejemplo:
 /etc/infra-monitor/secrets.env
 
 
 Permisos recomendados:
-
+```bash
 chmod 600 /etc/infra-monitor/secrets.env
 chown root:svc_monitor /etc/infra-monitor/secrets.env
 
-
-Permisos recomendados:
-
-chmod 600 /etc/infra-monitor/secrets.env
-chown root:svc_monitor /etc/infra-monitor/secrets.env
-
-
-El archivo se carga desde systemd:
+En systemd se carga así:
 EnvironmentFile=/etc/infra-monitor/secrets.env
-
-Cada entorno debe crear su propio archivo de secretos.
 
 
 📁 Estructura del proyecto
-
 infra-health-monitor/
 ├── monitor.sh
 ├── infra-health-monitor.service
 ├── README.md
 ├── .gitignore
 └── examples/
-    └── secrets.env.example
+└── secrets.env.example
 
 ⚙️ Instalación básica
-
 Copiar el script:
-/opt/infra-monitor/monitor.sh
+cp monitor.sh /opt/infra-monitor/monitor.sh
 
 Crear usuario de servicio:
 useradd -r -s /usr/sbin/nologin svc_monitor
-
-Crear archivo de secretos:
-/etc/infra-monitor/secrets.env
+Crear archivo de secretos local:
+cp examples/secrets.env.example /etc/infra-monitor/secrets.env
+# luego editar con tus credenciales reales
 
 Instalar el unit file:
-/etc/systemd/system/infra-health-monitor.service
+cp infra-health-monitor.service /etc/systemd/system/
 
 Recargar systemd:
 systemctl daemon-reload
@@ -120,10 +114,8 @@ Habilitar y arrancar:
 systemctl enable infra-health-monitor
 systemctl start infra-health-monitor
 
-
 📊 Logs
 journalctl -u infra-health-monitor.service
-
 
 🚧 Estado del proyecto
 
