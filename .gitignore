@@ -1,0 +1,20 @@
+# Secrets
+*.env
+*.secret
+secrets/
+.env
+.env.*
+
+# Logs
+logs/
+*.log
+
+# Editor / OS
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Systemd local overrides
+*.service.d/
+
