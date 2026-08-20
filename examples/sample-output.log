@@ -1,0 +1,7 @@
+[infra-monitor] 2026-08-20 10:00:00 - [DFS] DFS_MODE detected: tcp
+[infra-monitor] 2026-08-20 10:00:00 - Environment validation OK
+[infra-monitor] 2026-08-20 10:00:00 - [DB] Starting TCP connectivity check to db.example.internal:1433
+[infra-monitor] 2026-08-20 10:00:00 - [DB] latency=12ms status=OK
+[infra-monitor] 2026-08-20 10:00:00 - [DFS] Checking TCP connectivity to files.example.internal:445
+[infra-monitor] 2026-08-20 10:00:00 - [DFS] latency=8ms status=OK
+[infra-monitor] 2026-08-20 10:00:00 - GLOBAL STATUS: OK
