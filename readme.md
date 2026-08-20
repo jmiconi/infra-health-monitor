@@ -1,135 +1,202 @@
-# Infra Health Monitor (DB + DFS)
+# Infra Health Monitor
 
-## 📌 Descripción
+A small, auditable infrastructure health-check service built with **Bash + systemd**.
 
-**Infra Health Monitor** es un servicio de monitoreo liviano, implementado en **Bash + systemd**, orientado a verificar la salud básica de componentes críticos de infraestructura on-premise.
+The project monitors basic availability and connection latency for critical infrastructure dependencies without requiring a large monitoring stack on the host.
 
-Actualmente monitorea:
+Current checks cover:
 
-- Conectividad TCP hacia **SQL Server**
-- Conectividad TCP hacia **DFS / File Server (SMB 445)**
+- SQL Server TCP connectivity
+- SMB / DFS TCP connectivity
+- configurable warning and critical latency thresholds
+- configuration validation before checks run
 
-El proyecto está diseñado para ser:
+## Why this project exists
 
-- simple
-- auditable
-- fácil de extender
-- seguro en el manejo de credenciales
+Sometimes a full observability platform is unnecessary for a very specific operational question:
 
----
+> Can this server reach the infrastructure services it depends on, and how long does that connection take?
 
-## 🎯 Objetivos
+Infra Health Monitor provides that answer using standard Linux tooling, explicit exit codes and journal-friendly output.
 
-- Proveer health checks confiables de infraestructura crítica
-- Separar **lógica**, **configuración** y **secretos**
-- Integrarse de forma nativa con `systemd` y `journalctl`
-- Servir como proyecto de portfolio (Infra / SRE / DevOps)
+## Runtime model
 
----
+```text
+┌──────────────────────┐
+│   systemd service    │
+└──────────┬───────────┘
+           ▼
+┌──────────────────────┐
+│      monitor.sh      │
+│ config validation    │
+│ TCP checks + latency │
+└───────┬────────┬─────┘
+        │        │
+        ▼        ▼
+   SQL Server   SMB/DFS
+        │
+        ▼
+ stdout / stderr
+        │
+        ▼
+    journalctl
+```
 
-## 🧱 Arquitectura
+## Design goals
 
-- **Lenguaje:** Bash
-- **Ejecución:** systemd service
-- **Logs:** stdout / stderr → journal
-- **Configuración:** variables de entorno
-- **Secretos:** archivo externo con permisos restrictivos
-- **Frecuencia:** ejecución periódica (ej. cada 30s)
+- minimal dependencies
+- easy to audit
+- simple failure semantics
+- secrets kept outside source control
+- native systemd operation
+- useful logs for troubleshooting
+- easy extension with additional checks
 
----
+## Status semantics
 
-## 🔍 Qué se monitorea
+The script reports explicit health states based on configurable latency thresholds.
 
-### Base de datos (SQL Server)
+| Condition | Result |
+|---|---|
+| Connection succeeds below warning threshold | `OK` |
+| Connection succeeds above warning threshold | `WARNING` |
+| Connection exceeds critical threshold | `CRITICAL` |
+| Connection fails / times out | `CRITICAL` |
+| Required configuration is missing | fatal configuration error |
 
-- Conectividad TCP al host y puerto configurados
-- Medición de latencia
-- Umbrales configurables:
-  - WARN
-  - CRIT
+Critical conditions exit with code `2`, making the script straightforward to integrate with service supervision or external automation.
 
-> En esta etapa **no se ejecutan queries**.  
-> El foco está en disponibilidad de red y servicio.
+## Repository structure
 
----
-
-### DFS / File Server
-
-- Conectividad TCP al puerto SMB (445)
-- Chequeo opcional (puede deshabilitarse vía configuración)
-
----
-
-## 🔐 Manejo de secretos
-
-Las credenciales **NO se almacenan**:
-
-- en el script
-- en el unit file
-- en el repositorio
-
-Se utilizan archivos externos de ejemplo:  
-examples/secrets.env.example
-
-
-Cada entorno debe crear su propio archivo real de secretos, por ejemplo:
-/etc/infra-monitor/secrets.env
-
-
-Permisos recomendados:
-```bash
-chmod 600 /etc/infra-monitor/secrets.env
-chown root:svc_monitor /etc/infra-monitor/secrets.env
-
-En systemd se carga así:
-EnvironmentFile=/etc/infra-monitor/secrets.env
-
-
-📁 Estructura del proyecto
+```text
 infra-health-monitor/
 ├── monitor.sh
 ├── infra-health-monitor.service
-├── README.md
+├── examples/
+│   ├── secrets.env.example
+│   └── sample-output.log
+├── SECURITY.md
 ├── .gitignore
-└── examples/
-└── secrets.env.example
+└── readme.md
+```
 
-⚙️ Instalación básica
-Copiar el script:
-cp monitor.sh /opt/infra-monitor/monitor.sh
+## Configuration
 
-Crear usuario de servicio:
-useradd -r -s /usr/sbin/nologin svc_monitor
-Crear archivo de secretos local:
-cp examples/secrets.env.example /etc/infra-monitor/secrets.env
-# luego editar con tus credenciales reales
+Runtime configuration is loaded from an external secrets/configuration file rather than embedded in the script.
 
-Instalar el unit file:
-cp infra-health-monitor.service /etc/systemd/system/
+Example:
 
-Recargar systemd:
-systemctl daemon-reload
+```bash
+MONITOR_ENV=lab
+LOG_PREFIX=infra-monitor
 
-Habilitar y arrancar:
-systemctl enable infra-health-monitor
-systemctl start infra-health-monitor
+DB_HOST=db.example.internal
+DB_PORT=1433
+DB_TIMEOUT=3
+DB_WARN_MS=200
+DB_CRIT_MS=1000
 
-📊 Logs
-journalctl -u infra-health-monitor.service
+DFS_MODE=tcp
+DFS_HOST=files.example.internal
+DFS_PORT=445
+DFS_TIMEOUT=3
+DFS_WARN_MS=200
+DFS_CRIT_MS=1000
+```
 
-🚧 Estado del proyecto
+Use `examples/secrets.env.example` as the template. Never commit the real runtime file.
 
-✔️ Monitoreo TCP DB
-✔️ Monitoreo TCP DFS
-✔️ Separación de secretos
-✔️ Integración con systemd
-🔜 Queries reales a SQL Server
-🔜 Escalado de estado (warnings acumulados → critical)
-🔜 Integración con herramientas externas
+## Installation
 
-🤝 Motivación
+### 1. Create directories
 
-Proyecto desarrollado como:
-Laboratorio técnico
-Ejercicio de buenas prácticas de infraestructura
-Pieza de portfolio profesional
+```bash
+sudo install -d -m 0755 /opt/infra-monitor
+sudo install -d -m 0750 /etc/infra-monitor
+```
+
+### 2. Install the script
+
+```bash
+sudo install -m 0755 monitor.sh /opt/infra-monitor/monitor.sh
+```
+
+### 3. Create the service account
+
+```bash
+sudo useradd --system --shell /usr/sbin/nologin svc_monitor
+```
+
+### 4. Create runtime configuration
+
+Copy the example and edit it for the environment:
+
+```bash
+sudo cp examples/secrets.env.example /etc/infra-monitor/infra-monitor.secrets
+sudo chmod 600 /etc/infra-monitor/infra-monitor.secrets
+sudo chown root:root /etc/infra-monitor/infra-monitor.secrets
+```
+
+### 5. Install the systemd unit
+
+```bash
+sudo cp infra-health-monitor.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now infra-health-monitor.service
+```
+
+## Operations
+
+Check service state:
+
+```bash
+systemctl status infra-health-monitor.service
+```
+
+Follow logs:
+
+```bash
+journalctl -u infra-health-monitor.service -f
+```
+
+Run the check directly for troubleshooting:
+
+```bash
+sudo -u svc_monitor /opt/infra-monitor/monitor.sh
+```
+
+## Example output
+
+```text
+[infra-monitor] 2026-08-20 10:00:00 - Environment validation OK
+[infra-monitor] 2026-08-20 10:00:00 - [DB] Starting TCP connectivity check to db.example.internal:1433
+[infra-monitor] 2026-08-20 10:00:00 - [DB] latency=12ms status=OK
+[infra-monitor] 2026-08-20 10:00:00 - [DFS] Checking TCP connectivity to files.example.internal:445
+[infra-monitor] 2026-08-20 10:00:00 - [DFS] latency=8ms status=OK
+[infra-monitor] 2026-08-20 10:00:00 - GLOBAL STATUS: OK
+```
+
+## Security model
+
+Real credentials, internal addresses and organization-specific values belong in the external runtime configuration and must not be stored in Git.
+
+See [SECURITY.md](SECURITY.md).
+
+## Roadmap
+
+Potential extensions:
+
+- real SQL query health checks
+- accumulated warning / degradation state
+- structured JSON output
+- integration with Grafana/Loki or another event pipeline
+- notification hooks
+- additional infrastructure dependency checks
+
+## Portfolio context
+
+This project demonstrates a pattern I use frequently in infrastructure work: **small, transparent automation that answers a precise operational question and behaves predictably under failure**.
+
+---
+
+Built by [Julián Miconi](https://github.com/jmiconi).
